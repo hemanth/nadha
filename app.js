@@ -44,6 +44,7 @@ const elements = {
     aiText: document.getElementById('ai-text'),
     voiceBtn: document.getElementById('voice-btn'),
     loading: document.getElementById('loading'),
+    loadingLabel: document.getElementById('loading-label'),
     progress: document.getElementById('progress'),
     progressText: document.getElementById('progress-text'),
 };
@@ -63,9 +64,12 @@ function setStatus(status, text) {
     }
 }
 
-function updateProgress(pct, text) {
+function updateProgress(pct, text, label) {
     elements.progress.style.width = `${pct}%`;
     elements.progressText.textContent = text || `${pct}%`;
+    if (label && elements.loadingLabel) {
+        elements.loadingLabel.textContent = label;
+    }
 }
 
 // ============================================================================
@@ -74,21 +78,26 @@ function updateProgress(pct, text) {
 
 async function initTTS() {
     console.log('[Nadha] Loading Supertonic TTS...');
-    updateProgress(0, 'Loading TTS models...');
+    updateProgress(0, 'Initializing...', 'Loading Supertonic TTS...');
 
     try {
-        const result = await loadTextToSpeech('assets/onnx', {
+        // Load from HuggingFace Spaces CDN (no git-lfs needed)
+        const HF_SPACE_URL = 'https://huggingface.co/spaces/Supertone/supertonic-2/resolve/main';
+        const onnxDir = `${HF_SPACE_URL}/assets/onnx`;
+        const voiceStylePath = `${HF_SPACE_URL}/assets/voice_styles/M1.json`;
+
+        const result = await loadTextToSpeech(onnxDir, {
             executionProviders: ['wasm'],
             graphOptimizationLevel: 'all'
         }, (modelName, current, total) => {
             const pct = Math.round((current / total) * 25); // TTS = 25% of loading
-            updateProgress(pct, `TTS: ${modelName}`);
+            updateProgress(pct, `${current}/${total}: ${modelName}`, 'Loading Supertonic TTS...');
         });
 
         state.tts = result.textToSpeech;
 
         // Load default voice style
-        state.ttsStyle = await loadVoiceStyle(['assets/voice_styles/M1.json']);
+        state.ttsStyle = await loadVoiceStyle([voiceStylePath]);
         state.ttsReady = true;
 
         console.log('[Nadha] TTS loaded successfully');
@@ -105,7 +114,7 @@ async function initTTS() {
 
 async function initLLM() {
     console.log('[Nadha] Loading LLM...');
-    updateProgress(30, 'Loading LLM...');
+    updateProgress(30, 'Initializing...', 'Loading SmolLM2 LLM...');
 
     try {
         state.wllama = new Wllama(WasmFromCDN, {
@@ -118,7 +127,7 @@ async function initLLM() {
             {
                 progressCallback: ({ loaded, total }) => {
                     const pct = 30 + Math.round((loaded / total) * 60); // LLM = 30-90% of loading
-                    updateProgress(pct, `LLM: ${Math.round((loaded / total) * 100)}%`);
+                    updateProgress(pct, `${Math.round((loaded / total) * 100)}%`, 'Loading SmolLM2 LLM...');
                 }
             }
         );
