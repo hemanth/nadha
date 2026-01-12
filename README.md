@@ -6,9 +6,9 @@ Talk to an AI and hear it respond. Runs entirely in your browser.
 
 ## Features
 
-- **On-device LLM:** Gemma 3 1B runs locally via WebAssembly
+- **On-device LLM:** SmolLM2-360M runs locally via WebAssembly
+- **Supertonic TTS:** High-quality text-to-speech via ONNX Runtime (optional)
 - **Voice input:** Web Speech API for speech-to-text
-- **Voice output:** Text-to-speech for AI responses
 - **Privacy first:** No data leaves your browser
 
 ## Usage
@@ -17,19 +17,32 @@ Talk to an AI and hear it respond. Runs entirely in your browser.
 # Install dependencies
 npm install
 
-# Start local server
-npx serve .
+# Start dev server
+npm run dev
 
 # Open http://localhost:3000
 ```
 
 Click the microphone → speak your question → hear the response.
 
+## Supertonic TTS (Optional)
+
+For high-quality on-device TTS, download the models:
+
+```bash
+# Requires git-lfs (brew install git-lfs && git lfs install)
+git clone https://huggingface.co/Supertone/supertonic-2 assets
+```
+
+Without these, the app uses browser's Web Speech API as fallback.
+
 ## Tech Stack
 
-- [Wllama](https://github.com/ngxson/wllama) - WebAssembly LLM inference
-- [Gemma 3 1B](https://huggingface.co/google/gemma-3-1b-it-qat-q4_0-gguf) - Google's efficient LLM
-- Web Speech API - Native browser STT/TTS
+| Component | Library |
+|-----------|---------|
+| LLM | [Wllama](https://github.com/ngxson/wllama) + SmolLM2-360M |
+| TTS | [Supertonic-2](https://github.com/supertone-inc/supertonic) (ONNX) |
+| STT | Web Speech API |
 
 ---
 
