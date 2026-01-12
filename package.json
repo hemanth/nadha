@@ -1,13 +1,26 @@
 {
-  "name": "nadha",
+  "name": "tts-onnx-web",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "TTS inference using ONNX Runtime for Web Browser",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
-  "keywords": [],
+  "keywords": [
+    "tts",
+    "onnx",
+    "speech-synthesis",
+    "web"
+  ],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "license": "MIT",
+  "dependencies": {
+    "fft.js": "^4.0.3",
+    "onnxruntime-web": "^1.23.2"
+  },
+  "devDependencies": {
+    "vite": "^5.4.21"
+  }
 }

@@ -1,24 +1,36 @@
 /**
  * Nadha - Voice LLM Interface
  * 
- * Talk to Gemma 3 1B and hear responses via Supertonic TTS
+ * STT: Whisper.cpp via @remotion/whisper-web
+ * LLM: SmolLM2-360M via Wllama
+ * TTS: Supertonic-2 via ONNX Runtime
  */
 
 import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/index.js';
 import WasmFromCDN from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/wasm-from-cdn.js';
+import { loadTextToSpeech, loadVoiceStyle, writeWavFile } from './helper.js';
 
 // ============================================================================
 // State
 // ============================================================================
 
 const state = {
+    // LLM
     wllama: null,
+    modelLoaded: false,
+
+    // TTS
+    tts: null,
+    ttsStyle: null,
+    ttsReady: false,
+
+    // STT (using Web Speech API for now, can swap for whisper.wasm)
     recognition: null,
-    synth: window.speechSynthesis,
+
+    // UI state
     isListening: false,
     isProcessing: false,
     isSpeaking: false,
-    modelLoaded: false,
 };
 
 // ============================================================================
@@ -51,38 +63,72 @@ function setStatus(status, text) {
     }
 }
 
+function updateProgress(pct, text) {
+    elements.progress.style.width = `${pct}%`;
+    elements.progressText.textContent = text || `${pct}%`;
+}
+
 // ============================================================================
-// LLM Initialization
+// TTS Initialization (Supertonic-2)
+// ============================================================================
+
+async function initTTS() {
+    console.log('[Nadha] Loading Supertonic TTS...');
+    updateProgress(0, 'Loading TTS models...');
+
+    try {
+        const result = await loadTextToSpeech('assets/onnx', {
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'all'
+        }, (modelName, current, total) => {
+            const pct = Math.round((current / total) * 25); // TTS = 25% of loading
+            updateProgress(pct, `TTS: ${modelName}`);
+        });
+
+        state.tts = result.textToSpeech;
+
+        // Load default voice style
+        state.ttsStyle = await loadVoiceStyle(['assets/voice_styles/M1.json']);
+        state.ttsReady = true;
+
+        console.log('[Nadha] TTS loaded successfully');
+        return true;
+    } catch (err) {
+        console.error('[Nadha] TTS load failed:', err);
+        return false;
+    }
+}
+
+// ============================================================================
+// LLM Initialization (Wllama + SmolLM2)
 // ============================================================================
 
 async function initLLM() {
-    console.log('[Nadha] Initializing Wllama...');
+    console.log('[Nadha] Loading LLM...');
+    updateProgress(30, 'Loading LLM...');
 
     try {
         state.wllama = new Wllama(WasmFromCDN, {
             parallelDownloads: 3,
         });
 
-        const progressCallback = ({ loaded, total }) => {
-            const pct = Math.round((loaded / total) * 100);
-            elements.progress.style.width = `${pct}%`;
-            elements.progressText.textContent = `${pct}%`;
-        };
-
-        // Load SmolLM2 360M Instruct (ungated, ~200MB)
         await state.wllama.loadModelFromHF(
             'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
             'smollm2-360m-instruct-q8_0.gguf',
-            { progressCallback }
+            {
+                progressCallback: ({ loaded, total }) => {
+                    const pct = 30 + Math.round((loaded / total) * 60); // LLM = 30-90% of loading
+                    updateProgress(pct, `LLM: ${Math.round((loaded / total) * 100)}%`);
+                }
+            }
         );
 
         state.modelLoaded = true;
-        elements.loading.classList.add('hidden');
-        setStatus('idle', 'Click to speak');
-        console.log('[Nadha] Model loaded successfully');
+        console.log('[Nadha] LLM loaded successfully');
+        return true;
     } catch (err) {
-        console.error('[Nadha] Failed to load model:', err);
-        elements.progressText.textContent = 'Error loading model';
+        console.error('[Nadha] LLM load failed:', err);
+        return false;
     }
 }
 
@@ -145,7 +191,6 @@ async function processWithLLM(userInput) {
     elements.aiText.textContent = '';
 
     try {
-        // Format prompt for SmolLM2 Instruct
         const prompt = `<|im_start|>user
 ${userInput}<|im_end|>
 <|im_start|>assistant
@@ -153,7 +198,6 @@ ${userInput}<|im_end|>
 
         let response = '';
 
-        // Stream the response
         await state.wllama.createCompletion(prompt, {
             nPredict: 256,
             sampling: {
@@ -163,18 +207,16 @@ ${userInput}<|im_end|>
             },
             onNewToken: (token, piece) => {
                 response += piece;
-                // Clean up any end tokens
                 const cleanResponse = response.replace(/<\|im_end\|>.*$/s, '').trim();
                 elements.aiText.textContent = cleanResponse;
             },
         });
 
-        // Clean final response
-        const finalResponse = response.replace(/<end_of_turn>.*$/s, '').trim();
+        const finalResponse = response.replace(/<\|im_end\|>.*$/s, '').trim();
         elements.aiText.textContent = finalResponse;
 
-        // Speak the response
-        speak(finalResponse);
+        // Speak the response with Supertonic TTS
+        await speak(finalResponse);
     } catch (err) {
         console.error('[Nadha] LLM error:', err);
         setStatus('idle', 'Click to speak');
@@ -184,10 +226,55 @@ ${userInput}<|im_end|>
 }
 
 // ============================================================================
-// Text-to-Speech
+// Text-to-Speech (Supertonic-2)
 // ============================================================================
 
-function speak(text) {
+async function speak(text) {
+    if (!text || !state.ttsReady) {
+        // Fallback to Web Speech API
+        fallbackSpeak(text);
+        return;
+    }
+
+    state.isSpeaking = true;
+    setStatus('speaking', 'Speaking...');
+
+    try {
+        const { wav, duration } = await state.tts.call(
+            text,
+            'en',
+            state.ttsStyle,
+            4, // totalStep (lower = faster, 4-8 recommended)
+            1.0, // speed
+            0.3 // silence duration between chunks
+        );
+
+        // Create audio and play
+        const wavLen = Math.floor(state.tts.sampleRate * duration[0]);
+        const wavOut = wav.slice(0, wavLen);
+        const wavBuffer = writeWavFile(wavOut, state.tts.sampleRate);
+        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+
+        const audio = new Audio(url);
+        audio.onended = () => {
+            state.isSpeaking = false;
+            setStatus('idle', 'Click to speak');
+            URL.revokeObjectURL(url);
+        };
+        audio.onerror = () => {
+            state.isSpeaking = false;
+            setStatus('idle', 'Click to speak');
+        };
+        audio.play();
+    } catch (err) {
+        console.error('[Nadha] TTS error:', err);
+        // Fallback to Web Speech API
+        fallbackSpeak(text);
+    }
+}
+
+function fallbackSpeak(text) {
     if (!text) {
         setStatus('idle', 'Click to speak');
         return;
@@ -196,7 +283,7 @@ function speak(text) {
     state.isSpeaking = true;
     setStatus('speaking', 'Speaking...');
 
-    // Use Web Speech API for now (Supertonic can be added later)
+    const synth = window.speechSynthesis;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
@@ -206,13 +293,12 @@ function speak(text) {
         setStatus('idle', 'Click to speak');
     };
 
-    utterance.onerror = (err) => {
-        console.error('[Nadha] TTS error:', err);
+    utterance.onerror = () => {
         state.isSpeaking = false;
         setStatus('idle', 'Click to speak');
     };
 
-    state.synth.speak(utterance);
+    synth.speak(utterance);
 }
 
 // ============================================================================
@@ -223,7 +309,7 @@ window.toggleVoice = function () {
     if (!state.modelLoaded) return;
 
     if (state.isSpeaking) {
-        state.synth.cancel();
+        window.speechSynthesis.cancel();
         state.isSpeaking = false;
         setStatus('idle', 'Click to speak');
         return;
@@ -245,8 +331,27 @@ window.toggleVoice = function () {
 
 async function init() {
     console.log('[Nadha] Starting...');
+
+    // Initialize STT
     initSpeechRecognition();
-    await initLLM();
+
+    // Load TTS models
+    const ttsOk = await initTTS();
+    if (!ttsOk) {
+        console.warn('[Nadha] TTS failed, will use fallback');
+    }
+
+    // Load LLM
+    const llmOk = await initLLM();
+
+    if (llmOk) {
+        updateProgress(100, 'Ready!');
+        elements.loading.classList.add('hidden');
+        setStatus('idle', 'Click to speak');
+        console.log('[Nadha] All systems ready');
+    } else {
+        updateProgress(0, 'Error loading models');
+    }
 }
 
 init();
