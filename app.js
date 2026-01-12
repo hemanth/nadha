@@ -69,10 +69,10 @@ async function initLLM() {
             elements.progressText.textContent = `${pct}%`;
         };
 
-        // Load Gemma 3 1B Q4 from Hugging Face
+        // Load SmolLM2 360M Instruct (ungated, ~200MB)
         await state.wllama.loadModelFromHF(
-            'google/gemma-3-1b-it-qat-q4_0-gguf',
-            'gemma-3-1b-it-qat-q4_0.gguf',
+            'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
+            'smollm2-360m-instruct-q8_0.gguf',
             { progressCallback }
         );
 
@@ -145,10 +145,10 @@ async function processWithLLM(userInput) {
     elements.aiText.textContent = '';
 
     try {
-        // Format prompt for Gemma instruction-tuned
-        const prompt = `<start_of_turn>user
-${userInput}<end_of_turn>
-<start_of_turn>model
+        // Format prompt for SmolLM2 Instruct
+        const prompt = `<|im_start|>user
+${userInput}<|im_end|>
+<|im_start|>assistant
 `;
 
         let response = '';
@@ -164,7 +164,7 @@ ${userInput}<end_of_turn>
             onNewToken: (token, piece) => {
                 response += piece;
                 // Clean up any end tokens
-                const cleanResponse = response.replace(/<end_of_turn>.*$/s, '').trim();
+                const cleanResponse = response.replace(/<\|im_end\|>.*$/s, '').trim();
                 elements.aiText.textContent = cleanResponse;
             },
         });
