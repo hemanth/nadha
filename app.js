@@ -1,33 +1,23 @@
 /**
- * Nadha - Voice LLM Interface
+ * Nadha - Voice LLM Interface (Simplified)
  * 
- * STT: Whisper.cpp via @remotion/whisper-web
+ * STT: Web Speech API (Chrome)
  * LLM: SmolLM2-360M via Wllama
- * TTS: Supertonic-2 via ONNX Runtime
+ * TTS: Web Speech Synthesis API
  */
 
 import { Wllama } from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/index.js';
 import WasmFromCDN from 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2.2.1/esm/wasm-from-cdn.js';
-import { loadTextToSpeech, loadVoiceStyle, writeWavFile } from './helper.js';
 
 // ============================================================================
 // State
 // ============================================================================
 
 const state = {
-    // LLM
     wllama: null,
     modelLoaded: false,
-
-    // TTS
-    tts: null,
-    ttsStyle: null,
-    ttsReady: false,
-
-    // STT (using Web Speech API for now, can swap for whisper.wasm)
     recognition: null,
-
-    // UI state
+    synth: window.speechSynthesis,
     isListening: false,
     isProcessing: false,
     isSpeaking: false,
@@ -56,12 +46,7 @@ const elements = {
 function setStatus(status, text) {
     elements.status.className = `status ${status}`;
     elements.statusText.textContent = text;
-
-    if (status === 'listening') {
-        elements.voiceBtn.classList.add('active');
-    } else {
-        elements.voiceBtn.classList.remove('active');
-    }
+    elements.voiceBtn.classList.toggle('active', status === 'listening');
 }
 
 function updateProgress(pct, text, label) {
@@ -73,61 +58,23 @@ function updateProgress(pct, text, label) {
 }
 
 // ============================================================================
-// TTS Initialization (Supertonic-2)
-// ============================================================================
-
-async function initTTS() {
-    console.log('[Nadha] Loading Supertonic TTS...');
-    updateProgress(0, 'Initializing...', 'Loading Supertonic TTS...');
-
-    try {
-        // Load from HuggingFace Spaces CDN (no git-lfs needed)
-        const HF_SPACE_URL = 'https://huggingface.co/spaces/Supertone/supertonic-2/resolve/main';
-        const onnxDir = `${HF_SPACE_URL}/assets/onnx`;
-        const voiceStylePath = `${HF_SPACE_URL}/assets/voice_styles/M1.json`;
-
-        const result = await loadTextToSpeech(onnxDir, {
-            executionProviders: ['wasm'],
-            graphOptimizationLevel: 'all'
-        }, (modelName, current, total) => {
-            const pct = Math.round((current / total) * 25); // TTS = 25% of loading
-            updateProgress(pct, `${current}/${total}: ${modelName}`, 'Loading Supertonic TTS...');
-        });
-
-        state.tts = result.textToSpeech;
-
-        // Load default voice style
-        state.ttsStyle = await loadVoiceStyle([voiceStylePath]);
-        state.ttsReady = true;
-
-        console.log('[Nadha] TTS loaded successfully');
-        return true;
-    } catch (err) {
-        console.error('[Nadha] TTS load failed:', err);
-        return false;
-    }
-}
-
-// ============================================================================
-// LLM Initialization (Wllama + SmolLM2)
+// LLM Initialization
 // ============================================================================
 
 async function initLLM() {
     console.log('[Nadha] Loading LLM...');
-    updateProgress(30, 'Initializing...', 'Loading SmolLM2 LLM...');
+    updateProgress(10, 'Initializing...', 'Loading SmolLM2...');
 
     try {
-        state.wllama = new Wllama(WasmFromCDN, {
-            parallelDownloads: 3,
-        });
+        state.wllama = new Wllama(WasmFromCDN, { parallelDownloads: 3 });
 
         await state.wllama.loadModelFromHF(
             'HuggingFaceTB/SmolLM2-360M-Instruct-GGUF',
             'smollm2-360m-instruct-q8_0.gguf',
             {
                 progressCallback: ({ loaded, total }) => {
-                    const pct = 30 + Math.round((loaded / total) * 60); // LLM = 30-90% of loading
-                    updateProgress(pct, `${Math.round((loaded / total) * 100)}%`, 'Loading SmolLM2 LLM...');
+                    const pct = 10 + Math.round((loaded / total) * 80);
+                    updateProgress(pct, `${Math.round((loaded / total) * 100)}%`, 'Loading SmolLM2...');
                 }
             }
         );
@@ -142,21 +89,20 @@ async function initLLM() {
 }
 
 // ============================================================================
-// Speech Recognition (STT)
+// Speech Recognition (STT) - Web Speech API
 // ============================================================================
 
 function initSpeechRecognition() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
         console.error('[Nadha] Speech recognition not supported');
-        return;
+        return false;
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     state.recognition = new SpeechRecognition();
-    state.recognition.continuous = true;  // Keep listening
+    state.recognition.continuous = true;
     state.recognition.interimResults = true;
     state.recognition.lang = 'en-US';
-    state.recognition.maxAlternatives = 1;
 
     state.recognition.onstart = () => {
         console.log('[Nadha] STT started');
@@ -166,8 +112,8 @@ function initSpeechRecognition() {
     };
 
     state.recognition.onresult = (event) => {
-        let interimTranscript = '';
         let finalTranscript = '';
+        let interimTranscript = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
@@ -179,10 +125,12 @@ function initSpeechRecognition() {
         }
 
         const displayText = finalTranscript || interimTranscript;
-        console.log('[Nadha] STT result:', displayText, 'isFinal:', !!finalTranscript);
-        elements.userText.textContent = `"${displayText}"`;
+        if (displayText) {
+            elements.userText.textContent = `"${displayText}"`;
+            console.log('[Nadha] STT:', displayText, 'isFinal:', !!finalTranscript);
+        }
 
-        // If we got a final result, stop listening and process
+        // Process when we get final result
         if (finalTranscript.trim()) {
             state.recognition.stop();
         }
@@ -191,22 +139,28 @@ function initSpeechRecognition() {
     state.recognition.onend = () => {
         console.log('[Nadha] STT ended');
         state.isListening = false;
-        const userInput = elements.userText.textContent.replace(/^"|"$/g, '');
-        console.log('[Nadha] User input:', userInput);
+        const userInput = elements.userText.textContent.replace(/^"|"$/g, '').trim();
 
-        if (userInput.trim()) {
+        if (userInput) {
             processWithLLM(userInput);
         } else {
-            console.log('[Nadha] No input detected');
             setStatus('idle', 'Click to speak');
         }
     };
 
     state.recognition.onerror = (event) => {
-        console.error('[Nadha] Speech recognition error:', event.error);
+        console.error('[Nadha] STT error:', event.error);
         state.isListening = false;
-        setStatus('idle', 'Click to speak');
+
+        if (event.error === 'no-speech') {
+            setStatus('idle', 'No speech detected');
+        } else {
+            setStatus('idle', 'Error - try again');
+        }
     };
+
+    console.log('[Nadha] Web Speech STT initialized');
+    return true;
 }
 
 // ============================================================================
@@ -230,81 +184,32 @@ ${userInput}<|im_end|>
 
         await state.wllama.createCompletion(prompt, {
             nPredict: 256,
-            sampling: {
-                temp: 0.7,
-                top_k: 40,
-                top_p: 0.9,
-            },
+            sampling: { temp: 0.7, top_k: 40, top_p: 0.9 },
             onNewToken: (token, piece) => {
                 response += piece;
-                const cleanResponse = response.replace(/<\|im_end\|>.*$/s, '').trim();
-                elements.aiText.textContent = cleanResponse;
+                const clean = response.replace(/<\|im_end\|>.*$/s, '').trim();
+                elements.aiText.textContent = clean;
             },
         });
 
         const finalResponse = response.replace(/<\|im_end\|>.*$/s, '').trim();
         elements.aiText.textContent = finalResponse;
 
-        // Speak the response with Supertonic TTS
-        await speak(finalResponse);
+        // Speak the response
+        speak(finalResponse);
     } catch (err) {
         console.error('[Nadha] LLM error:', err);
-        setStatus('idle', 'Click to speak');
+        setStatus('idle', 'Error - try again');
     } finally {
         state.isProcessing = false;
     }
 }
 
 // ============================================================================
-// Text-to-Speech (Supertonic-2)
+// Text-to-Speech (TTS) - Web Speech Synthesis
 // ============================================================================
 
-async function speak(text) {
-    if (!text || !state.ttsReady) {
-        // Fallback to Web Speech API
-        fallbackSpeak(text);
-        return;
-    }
-
-    state.isSpeaking = true;
-    setStatus('speaking', 'Speaking...');
-
-    try {
-        const { wav, duration } = await state.tts.call(
-            text,
-            'en',
-            state.ttsStyle,
-            4, // totalStep (lower = faster, 4-8 recommended)
-            1.0, // speed
-            0.3 // silence duration between chunks
-        );
-
-        // Create audio and play
-        const wavLen = Math.floor(state.tts.sampleRate * duration[0]);
-        const wavOut = wav.slice(0, wavLen);
-        const wavBuffer = writeWavFile(wavOut, state.tts.sampleRate);
-        const blob = new Blob([wavBuffer], { type: 'audio/wav' });
-        const url = URL.createObjectURL(blob);
-
-        const audio = new Audio(url);
-        audio.onended = () => {
-            state.isSpeaking = false;
-            setStatus('idle', 'Click to speak');
-            URL.revokeObjectURL(url);
-        };
-        audio.onerror = () => {
-            state.isSpeaking = false;
-            setStatus('idle', 'Click to speak');
-        };
-        audio.play();
-    } catch (err) {
-        console.error('[Nadha] TTS error:', err);
-        // Fallback to Web Speech API
-        fallbackSpeak(text);
-    }
-}
-
-function fallbackSpeak(text) {
+function speak(text) {
     if (!text) {
         setStatus('idle', 'Click to speak');
         return;
@@ -313,7 +218,6 @@ function fallbackSpeak(text) {
     state.isSpeaking = true;
     setStatus('speaking', 'Speaking...');
 
-    const synth = window.speechSynthesis;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
     utterance.pitch = 1.0;
@@ -323,23 +227,24 @@ function fallbackSpeak(text) {
         setStatus('idle', 'Click to speak');
     };
 
-    utterance.onerror = () => {
+    utterance.onerror = (err) => {
+        console.error('[Nadha] TTS error:', err);
         state.isSpeaking = false;
         setStatus('idle', 'Click to speak');
     };
 
-    synth.speak(utterance);
+    state.synth.speak(utterance);
 }
 
 // ============================================================================
 // Voice Toggle
 // ============================================================================
 
-window.toggleVoice = function () {
+window.toggleVoice = async function () {
     if (!state.modelLoaded) return;
 
     if (state.isSpeaking) {
-        window.speechSynthesis.cancel();
+        state.synth.cancel();
         state.isSpeaking = false;
         setStatus('idle', 'Click to speak');
         return;
@@ -352,7 +257,16 @@ window.toggleVoice = function () {
 
     if (state.isProcessing) return;
 
-    state.recognition.start();
+    // Request mic permission first
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        console.log('[Nadha] Mic permission granted');
+        state.recognition.start();
+    } catch (err) {
+        console.error('[Nadha] Mic permission denied:', err);
+        setStatus('idle', 'Mic access denied');
+    }
 };
 
 // ============================================================================
@@ -362,13 +276,10 @@ window.toggleVoice = function () {
 async function init() {
     console.log('[Nadha] Starting...');
 
-    // Initialize STT
-    initSpeechRecognition();
-
-    // Load TTS models
-    const ttsOk = await initTTS();
-    if (!ttsOk) {
-        console.warn('[Nadha] TTS failed, will use fallback');
+    // Init STT
+    const sttOk = initSpeechRecognition();
+    if (!sttOk) {
+        console.warn('[Nadha] STT not supported in this browser');
     }
 
     // Load LLM
@@ -380,7 +291,7 @@ async function init() {
         setStatus('idle', 'Click to speak');
         console.log('[Nadha] All systems ready');
     } else {
-        updateProgress(0, 'Error loading models');
+        updateProgress(0, 'Error loading LLM');
     }
 }
 
