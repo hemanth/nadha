@@ -5,7 +5,9 @@
 }
 
 body {
-    background: #000;
+    background: linear-gradient(135deg, #0a0a0a 0%, #111 25%, #0a0a0a 50%, #0f0f0f 75%, #0a0a0a 100%);
+    background-size: 400% 400%;
+    animation: gradientShift 20s ease infinite;
     color: #fff;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     min-height: 100vh;
@@ -14,27 +16,66 @@ body {
     justify-content: center;
 }
 
+@keyframes gradientShift {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* Hint text */
+.hint {
+    font-size: 0.8rem;
+    opacity: 0.5;
+    margin-top: -0.5rem;
+    text-align: center;
+    animation: hintPulse 2s ease-in-out infinite;
+}
+
+@keyframes hintPulse {
+
+    0%,
+    100% {
+        opacity: 0.4;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.hint.hidden {
+    display: none;
+}
+
 .container {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3rem;
+    gap: 2.5rem;
     padding: 2rem;
     max-width: 600px;
     width: 100%;
     min-height: 100vh;
 }
 
-/* Status indicator */
+/* Status indicator with glow */
 .status {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     font-size: 0.875rem;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    opacity: 0.6;
+    letter-spacing: 0.15em;
+    transition: all 0.3s ease;
 }
 
 .pulse {
@@ -42,38 +83,140 @@ body {
     height: 12px;
     border-radius: 50%;
     background: #333;
+    transition: all 0.3s ease;
 }
 
 .status.idle .pulse {
-    background: #333;
+    background: #444;
+}
+
+.status.idle {
+    opacity: 0.5;
+}
+
+.status.listening {
+    opacity: 1;
+    color: #4ade80;
 }
 
 .status.listening .pulse {
-    background: #fff;
-    animation: pulse 1s ease-in-out infinite;
+    background: #4ade80;
+    box-shadow: 0 0 20px #4ade80, 0 0 40px #4ade8050;
+    animation: listeningPulse 1.5s ease-in-out infinite;
+}
+
+.status.thinking {
+    opacity: 1;
+    color: #fbbf24;
 }
 
 .status.thinking .pulse {
-    background: #666;
-    animation: pulse 0.5s ease-in-out infinite;
+    background: #fbbf24;
+    box-shadow: 0 0 15px #fbbf24;
+    animation: thinkingPulse 0.6s ease-in-out infinite;
+}
+
+.status.speaking {
+    opacity: 1;
+    color: #60a5fa;
 }
 
 .status.speaking .pulse {
-    background: #fff;
-    animation: pulse 0.3s ease-in-out infinite;
+    background: #60a5fa;
+    box-shadow: 0 0 20px #60a5fa, 0 0 40px #60a5fa50;
+    animation: speakingPulse 0.4s ease-in-out infinite;
 }
 
-@keyframes pulse {
+@keyframes listeningPulse {
 
     0%,
     100% {
-        opacity: 0.4;
+        transform: scale(1);
+        opacity: 0.7;
+    }
+
+    50% {
+        transform: scale(1.4);
+        opacity: 1;
+    }
+}
+
+@keyframes thinkingPulse {
+
+    0%,
+    100% {
         transform: scale(1);
     }
 
     50% {
-        opacity: 1;
         transform: scale(1.2);
+        opacity: 0.6;
+    }
+}
+
+@keyframes speakingPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.15);
+    }
+}
+
+/* Waveform visualizer */
+.waveform {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 40px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.waveform.active {
+    opacity: 1;
+}
+
+.waveform .bar {
+    width: 4px;
+    background: #fff;
+    border-radius: 2px;
+    animation: wave 1s ease-in-out infinite;
+}
+
+.waveform .bar:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.waveform .bar:nth-child(2) {
+    animation-delay: 0.1s;
+}
+
+.waveform .bar:nth-child(3) {
+    animation-delay: 0.2s;
+}
+
+.waveform .bar:nth-child(4) {
+    animation-delay: 0.3s;
+}
+
+.waveform .bar:nth-child(5) {
+    animation-delay: 0.4s;
+}
+
+@keyframes wave {
+
+    0%,
+    100% {
+        height: 8px;
+    }
+
+    50% {
+        height: 32px;
     }
 }
 
@@ -84,39 +227,45 @@ body {
     flex-direction: column;
     justify-content: center;
     text-align: center;
-    min-height: 200px;
+    min-height: 180px;
 }
 
 .message-container {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.5rem;
 }
 
 .user-text {
     font-size: 1rem;
     opacity: 0.5;
     font-style: italic;
+    transition: opacity 0.3s ease;
 }
 
 .ai-text {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     font-weight: 300;
     line-height: 1.6;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.4s ease;
 }
 
+.ai-text:not(:empty) {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.user-text:empty,
 .ai-text:empty {
     display: none;
 }
 
-.user-text:empty {
-    display: none;
-}
-
-/* Voice button */
+/* Voice button with glow */
 .voice-btn {
-    width: 80px;
-    height: 80px;
+    width: 90px;
+    height: 90px;
     border-radius: 50%;
     border: 2px solid #333;
     background: transparent;
@@ -125,18 +274,53 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.voice-btn::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: transparent;
+    transition: all 0.3s ease;
 }
 
 .voice-btn:hover {
     border-color: #fff;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    transform: scale(1.05);
 }
 
-.voice-btn.active {
-    border-color: #fff;
-    background: #fff;
-    color: #000;
+.voice-btn.listening {
+    border-color: #4ade80;
+    background: rgba(74, 222, 128, 0.1);
+    box-shadow: 0 0 30px #4ade8040;
+    animation: btnPulse 2s ease-in-out infinite;
+}
+
+.voice-btn.speaking {
+    border-color: #60a5fa;
+    background: rgba(96, 165, 250, 0.1);
+    box-shadow: 0 0 30px #60a5fa40;
+}
+
+.voice-btn.thinking {
+    border-color: #fbbf24;
+    background: rgba(251, 191, 36, 0.1);
+}
+
+@keyframes btnPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px #4ade8030;
+    }
+
+    50% {
+        box-shadow: 0 0 40px #4ade8060;
+    }
 }
 
 .voice-btn:disabled {
@@ -156,7 +340,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 1rem;
+    gap: 1.5rem;
     z-index: 100;
 }
 
@@ -165,7 +349,7 @@ body {
 }
 
 .progress-bar {
-    width: 200px;
+    width: 250px;
     height: 4px;
     background: #222;
     border-radius: 2px;
@@ -174,7 +358,7 @@ body {
 
 .progress {
     height: 100%;
-    background: #fff;
+    background: linear-gradient(90deg, #4ade80, #60a5fa);
     width: 0%;
     transition: width 0.3s ease;
 }
@@ -182,4 +366,31 @@ body {
 #progress-text {
     font-size: 0.75rem;
     opacity: 0.5;
+}
+
+#loading-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.loading-fact {
+    font-size: 0.875rem;
+    opacity: 0.7;
+    max-width: 400px;
+    text-align: center;
+    line-height: 1.5;
+    margin-top: 0.5rem;
+    animation: factFade 3s ease-in-out infinite;
+}
+
+@keyframes factFade {
+
+    0%,
+    100% {
+        opacity: 0.5;
+    }
+
+    50% {
+        opacity: 0.9;
+    }
 }

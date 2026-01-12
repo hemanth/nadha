@@ -16,6 +16,15 @@
             <span id="status-text">Click to start</span>
         </div>
 
+        <!-- Waveform visualizer -->
+        <div id="waveform" class="waveform">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </div>
+
         <!-- Transcript area -->
         <div id="transcript" class="transcript">
             <div class="message-container">
@@ -34,6 +43,9 @@
             </svg>
         </button>
 
+        <!-- Hint for first interaction -->
+        <p id="hint" class="hint">Tap the mic to enable voice</p>
+
         <!-- Loading indicator for model -->
         <div id="loading" class="loading">
             <p id="loading-label">Loading models...</p>
@@ -41,6 +53,7 @@
                 <div id="progress" class="progress"></div>
             </div>
             <p id="progress-text">0%</p>
+            <p id="loading-fact" class="loading-fact">✨ Did you know?</p>
         </div>
     </div>
 
