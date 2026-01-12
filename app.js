@@ -153,30 +153,51 @@ function initSpeechRecognition() {
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     state.recognition = new SpeechRecognition();
-    state.recognition.continuous = false;
+    state.recognition.continuous = true;  // Keep listening
     state.recognition.interimResults = true;
     state.recognition.lang = 'en-US';
+    state.recognition.maxAlternatives = 1;
 
     state.recognition.onstart = () => {
+        console.log('[Nadha] STT started');
         state.isListening = true;
         setStatus('listening', 'Listening...');
         elements.userText.textContent = '';
     };
 
     state.recognition.onresult = (event) => {
-        const transcript = Array.from(event.results)
-            .map(result => result[0].transcript)
-            .join('');
-        elements.userText.textContent = `"${transcript}"`;
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+
+        const displayText = finalTranscript || interimTranscript;
+        console.log('[Nadha] STT result:', displayText, 'isFinal:', !!finalTranscript);
+        elements.userText.textContent = `"${displayText}"`;
+
+        // If we got a final result, stop listening and process
+        if (finalTranscript.trim()) {
+            state.recognition.stop();
+        }
     };
 
     state.recognition.onend = () => {
+        console.log('[Nadha] STT ended');
         state.isListening = false;
         const userInput = elements.userText.textContent.replace(/^"|"$/g, '');
+        console.log('[Nadha] User input:', userInput);
 
         if (userInput.trim()) {
             processWithLLM(userInput);
         } else {
+            console.log('[Nadha] No input detected');
             setStatus('idle', 'Click to speak');
         }
     };
